@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/ca
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 
-export const revalidate = 0;
+export const revalidate = 60;
 
 async function getReports(type?: ReportType): Promise<Report[]> {
   let query = supabase

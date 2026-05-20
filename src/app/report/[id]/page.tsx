@@ -8,7 +8,7 @@ import { notFound } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-export const revalidate = 0;
+export const revalidate = 60;
 
 async function getReport(id: number): Promise<Report | null> {
   const { data, error } = await supabase
