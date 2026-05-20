@@ -1,6 +1,6 @@
-import { supabase } from "@/lib/supabase";
 import type { Report } from "@/lib/types";
 import { reportTypeLabel, reportTypeColor } from "@/lib/types";
+import { getReportBySlug } from "@/lib/reports";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import Link from "next/link";
@@ -8,18 +8,7 @@ import { notFound } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-export const revalidate = 60;
-
-async function getReport(id: number): Promise<Report | null> {
-  const { data, error } = await supabase
-    .from("reports")
-    .select("*")
-    .eq("id", id)
-    .single();
-
-  if (error || !data) return null;
-  return data as Report;
-}
+export const dynamic = "force-static";
 
 export default async function Page({
   params,
@@ -27,7 +16,7 @@ export default async function Page({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const report = await getReport(Number(id));
+  const report = getReportBySlug(id);
 
   if (!report) notFound();
 

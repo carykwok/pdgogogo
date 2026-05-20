@@ -1,30 +1,11 @@
-import { supabase } from "@/lib/supabase";
-import type { Report, ReportType } from "@/lib/types";
+import type { ReportType } from "@/lib/types";
 import { reportTypeLabel, reportTypeColor } from "@/lib/types";
+import { getAllReports, getReportsByType } from "@/lib/reports";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 
-export const revalidate = 60;
-
-async function getReports(type?: ReportType): Promise<Report[]> {
-  let query = supabase
-    .from("reports")
-    .select("*")
-    .order("report_date", { ascending: false })
-    .limit(50);
-
-  if (type) {
-    query = query.eq("type", type);
-  }
-
-  const { data, error } = await query;
-  if (error) {
-    console.error("Failed to fetch reports:", error);
-    return [];
-  }
-  return data as Report[];
-}
+export const dynamic = "force-static";
 
 export default async function Page({
   searchParams,
@@ -33,7 +14,7 @@ export default async function Page({
 }) {
   const sp = await searchParams;
   const activeType = (sp.type as ReportType) || undefined;
-  const reports = await getReports(activeType);
+  const reports = activeType ? getReportsByType(activeType) : getAllReports();
 
   const tabs: { label: string; type: ReportType | "all" }[] = [
     { label: "全部", type: "all" },
@@ -79,7 +60,7 @@ export default async function Page({
       ) : (
         <div className="flex flex-col gap-3">
           {reports.map((r) => (
-            <Link key={r.id} href={`/report/${r.id}`}>
+            <Link key={r.slug} href={`/report/${r.slug}`}>
               <Card className="hover:shadow-md transition-shadow border-zinc-200">
                 <CardHeader>
                   <div className="flex items-center gap-2 mb-1">

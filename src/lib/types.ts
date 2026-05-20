@@ -1,12 +1,11 @@
 export type ReportType = "morning" | "midday" | "close";
 
 export interface Report {
-  id: number;
+  slug: string;
   title: string;
   type: ReportType;
   content: string;
   report_date: string;
-  created_at: string;
 }
 
 export const reportTypeLabel: Record<ReportType, string> = {
