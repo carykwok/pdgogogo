@@ -4,24 +4,12 @@ import { NextRequest, NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Used only for WeCom callback URL verification.
-// The fallback list intentionally accepts common visual-confusion variants
-// because WeCom's UI makes uppercase I / lowercase l / digit 1 easy to mistype.
+// WeCom callback URL verification.
 const WECOM_CALLBACK_TOKEN =
   process.env.WECOM_CALLBACK_TOKEN || "pdgogogo20260521wecom";
 
-const PRIMARY_AES_KEY =
-  process.env.WECOM_CALLBACK_AES_KEY || "h2GcpgPIZjDfm4Zi5tEunRDP4EEKmsdW3Xe9lqzyxuO";
-
-const AES_KEY_CANDIDATES = Array.from(
-  new Set([
-    PRIMARY_AES_KEY,
-    "h2GcpgPIZjDfm4Zi5tEunRDP4EEKmsdW3Xe9lqzyxuO", // intended: uppercase I
-    "h2GcpgPlZjDfm4Zi5tEunRDP4EEKmsdW3Xe9lqzyxuO", // likely screenshot: lowercase l
-    "h2GcpgP1ZjDfm4Zi5tEunRDP4EEKmsdW3Xe9lqzyxuO", // common mistake: digit 1
-    "h2GcpqPIZjDfm4Zi5tEunRDP4EEKmsdW3Xe9lqzyxuO", // common mistake: q instead of g
-  ])
-);
+const WECOM_CALLBACK_AES_KEY =
+  process.env.WECOM_CALLBACK_AES_KEY || "h2GcpgPlZjDfm4Zi5tEunRDP4EEKmsdW3Xe9lqzyxuO";
 
 function sha1(parts: string[]): string {
   return crypto.createHash("sha1").update(parts.sort().join(""), "utf8").digest("hex");
@@ -33,10 +21,24 @@ function pkcs7Unpad(buffer: Buffer): Buffer {
   return buffer.subarray(0, buffer.length - pad);
 }
 
-function decryptEchoWithKey(echostr: string, encodingAesKey: string): string {
-  const aesKey = Buffer.from(`${encodingAesKey}=`, "base64");
+function getRawQueryParam(url: string, key: string): string {
+  const query = url.split("?")[1] || "";
+  for (const part of query.split("&")) {
+    const eq = part.indexOf("=");
+    const rawKey = eq >= 0 ? part.slice(0, eq) : part;
+    if (decodeURIComponent(rawKey) !== key) continue;
+    const rawValue = eq >= 0 ? part.slice(eq + 1) : "";
+    // Important: do NOT convert '+' to space. WeCom echostr is base64-like and
+    // may contain '+'. URLSearchParams would corrupt it into a space.
+    return decodeURIComponent(rawValue);
+  }
+  return "";
+}
+
+function decryptEcho(echostr: string): string {
+  const aesKey = Buffer.from(`${WECOM_CALLBACK_AES_KEY}=`, "base64");
   if (aesKey.length !== 32) {
-    throw new Error(`Invalid WeCom EncodingAESKey length: ${encodingAesKey.length}`);
+    throw new Error(`Invalid WeCom EncodingAESKey length: ${WECOM_CALLBACK_AES_KEY.length}`);
   }
 
   const encrypted = Buffer.from(echostr, "base64");
@@ -50,24 +52,11 @@ function decryptEchoWithKey(echostr: string, encodingAesKey: string): string {
   return plain.subarray(20, 20 + msgLen).toString("utf8");
 }
 
-function decryptEcho(echostr: string): string {
-  const errors: string[] = [];
-  for (const key of AES_KEY_CANDIDATES) {
-    try {
-      return decryptEchoWithKey(echostr, key);
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : String(error));
-    }
-  }
-  throw new Error(`All AES key candidates failed: ${errors.join(" | ")}`);
-}
-
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const msgSignature = searchParams.get("msg_signature") || "";
-  const timestamp = searchParams.get("timestamp") || "";
-  const nonce = searchParams.get("nonce") || "";
-  const echostr = searchParams.get("echostr") || "";
+  const msgSignature = getRawQueryParam(request.url, "msg_signature");
+  const timestamp = getRawQueryParam(request.url, "timestamp");
+  const nonce = getRawQueryParam(request.url, "nonce");
+  const echostr = getRawQueryParam(request.url, "echostr");
 
   if (!msgSignature || !timestamp || !nonce || !echostr) {
     return NextResponse.json({ ok: true, service: "wecom-callback" });
@@ -75,6 +64,7 @@ export async function GET(request: NextRequest) {
 
   const expected = sha1([WECOM_CALLBACK_TOKEN, timestamp, nonce, echostr]);
   if (expected !== msgSignature) {
+    console.error("WeCom signature mismatch", { expected, got: msgSignature });
     return new NextResponse("invalid signature", { status: 403 });
   }
 
@@ -90,6 +80,5 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST() {
-  // We do not need to receive messages for the report notification flow.
   return NextResponse.json({ ok: true });
 }
